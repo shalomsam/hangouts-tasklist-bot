@@ -97,6 +97,7 @@ function onAdd(event) {
 
 /**
   * Responds to a LIST command in Hangouts Chat.
+  *
   * @param {string} userMsg   - the message input from the User.
   * @param {string} name      - the user name.
   * @param {string} listPath  - the database list path.
@@ -229,7 +230,8 @@ function onList(event) {
 
 /**
   * Responds to a CLEAR command in Hangouts Chat.
-  * @param {Object} event     - the parent event object.
+  *
+  * @param {Object} event - the parent event object.
   */
 function onClear(event) {
   var listPath = event._taskListBot_.listPath;
@@ -281,6 +283,7 @@ function onClear(event) {
 
 /**
  * Responds to the HELP command in Hangouts Chat.
+ *
  * @param {Object} event - the parent event object.
  */
 function onHelp(event) {
@@ -306,9 +309,8 @@ function onHelp(event) {
 
 /**
  * Responds to a CARD_CLICKED event triggered in Hangouts Chat.
- * @param {object} event the event object from Hangouts Chat
- * @return {object} JSON-formatted response
- * @see https://developers.google.com/hangouts/chat/reference/message-formats/events
+ * @param {object} event the event object from Hangouts Chat.
+ * @return {object} JSON-formatted response.
  */
 function onCardClick(event) {
   var message = '';
@@ -330,6 +332,7 @@ function onCardClick(event) {
 
 /**
   * Responds to a COMPLETE (card_click) action in Hangouts Chat.
+  *
   * @param {integer} index    - the task index.
   * @param {string}  name     - the user name.
   * @param {string}  listPath - the database list path.
@@ -374,6 +377,7 @@ function completeAction(index, name, listPath, event) {
 
 /**
   * Responds to a TAKE (card_click) action in Hangouts Chat.
+  *
   * @param {integer} index    - the task index.
   * @param {string}  name     - the user name.
   * @param {string}  listPath - the database list path.
@@ -419,6 +423,7 @@ function takeAction(index, name, listPath, event) {
 
 /**
   * Responds to a CLEAR TASK (card_click) action in Hangouts Chat.
+  *
   * @param {string}  listPath - Database list path.
   * @param {boolean} clearAll - Clear all tasks (completed and open) when true.
   */
@@ -457,6 +462,7 @@ function clearTasksAction(listPath, clearAll) {
 
 /**
  * Get the Chat Room name or returns DM for Direct Messages.
+ *
  * @param {Object} event - The parent event object.
  * @returns {string}
  */
@@ -470,6 +476,7 @@ function getChatName(event) {
 
 /**
  * Generates the database list path for each room and DM (to create isolated lists per room/DM).
+ *
  * @param {Object} event - The parent event object.
  * @returns {string}
  */
@@ -488,6 +495,7 @@ function getListPath(event) {
 
 /**
  * Creates a card-formatted response.
+ *
  * @param {object} widgets the UI components to send.
  * @return {object} JSON-formatted response.
  */
@@ -503,6 +511,7 @@ function createCardResponse(widgets) {
 
 /**
  * Creates a card response from an array of sections.
+ *
  * @param {Array} sections - Array of card sections.
  */
 function createCardFromSections(sections) {
@@ -513,15 +522,30 @@ function createCardFromSections(sections) {
   };
 }
 
+/**
+ * Returns the color associated with the given status.
+ *
+ * @param {string} status - The Task status.
+ */
 function getStatusColor(status) {
   var colors = {open: "#3498db", taken: "#f1c40f", completed: "#2ecc71"};
   return colors[status.toLowerCase()];
 }
 
+/**
+ * Capitalize the given text.
+ *
+ * @param {string} text - string phrase or word.
+ */
 function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.substr(1);
 }
 
+/**
+ * Binds TaskList Bot specific params into the event Object.
+ *
+ * @param {Object} event - the event object from Hangouts Chat.
+ */
 function bindTaskBotParams(event) {
   var userMsg = getUserMsg(event);
   var params = userMsg.trim().split(" ");
@@ -530,6 +554,11 @@ function bindTaskBotParams(event) {
   event._taskListBot_ = { command: command, listPath: listPath, userMsg: userMsg };
 }
 
+/**
+ * Gets User's initial/original message from event object.
+ *
+ * @param {Object} event - the event object from Hangouts Chat.
+ */
 function getUserMsg(event) {
   var userMsg = "";
   if (event.hasOwnProperty('message') && event.message.hasOwnProperty('argumentText')) {
