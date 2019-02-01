@@ -22,6 +22,14 @@ var STATUSES = {
   COMPLETED: 'completed'
 };
 
+var TASK_TYPE = {
+  TEXT: "Task",
+  TICKET: "Task Ticket",
+  CR: "Code Review",
+  MR: "Merge Request",
+  QA: "QA Task"
+}
+
 // Require Moment.js
 var momentUrl = "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.23.0/moment.min.js";
 var moment = UrlFetchApp.fetch(momentUrl).getContentText();
@@ -74,25 +82,42 @@ function onAdd(event) {
   var listPath = event._taskListBot_.listPath;
   var message = "New Task added by " + name;
   var list = db.getData(listPath) || [];
-  var sections = [];
+  var urlRegex = /(https?:\/\/[^\s]+)/g;
 
-  userMsg = userMsg.replace(COMMANDS.ADD, '').trim();
+  userMsg = userMsg.replace(COMMANDS.ADD, '').trim().toLowerCase();
 
   if (userMsg === "") {
     message = "No task specified. Please specify task description or link after 'add'";
   } else {
-    list.push({ task: userMsg, status: STATUSES.OPEN, createdBy: name, takenBy: '', createdOn: Date.now(), takenOn: null, completeOn: null });
+    var newObj = { taskType: TASK_TYPE.TEXT, task: userMsg, status: STATUSES.OPEN, createdBy: name, takenBy: '', createdOn: Date.now(), takenOn: null, completeOn: null };
+
+    var urls = userMsg.match(urlRegex) || [];
+    if (urls.length) {
+      taskType = TASK_TYPE.TICKET;
+      var ticketId = _.last(urls[0].split('/'));
+      newObj.ticketId = ticketId;
+      newObj.ticketLink = urls[0];
+    }
+
+    if (userMsg.indexOf('cr') > -1 || userMsg.indexOf('code review') > -1) {
+      newObj.taskType = TASK_TYPE.CR;
+    } else if (userMsg.indexOf('mr') > -1 || userMsg.indexOf('merge request') > -1) {
+      newObj.taskType = TASK_TYPE.MR;
+    } else if (userMsg.indexOf('qa') > -1) {
+      newObj.taskType = TASK_TYPE.QA;
+    }
+
+    if (newObj.taskType !== TASK_TYPE.TEXT) {
+      newObj.task = newObj.taskType + " for <a href=\"" + newObj.ticketLink + "\">" + newObj.ticketId.toUpperCase() + "</a>"
+    }
+
+    list.push(newObj);
     db.setData(listPath, list);
   }
 
-  sections.push({"widgets": [{
-      "textParagraph": {
-        "text": message
-      }
-    }]
-  });
-
-  return createCardFromSections(sections);
+  var response = onList(event);
+  response.cards[0].header.subtitle = message;
+  return response;
 }
 
 /**
@@ -106,7 +131,7 @@ function onAdd(event) {
 function onList(event) {
   var listPath = event._taskListBot_.listPath;
   var name = event.user.displayName;
-  var params = event._taskListBot_.params;
+  var params = event._taskListBot_.userMsg;
 
   var icons = {
     open: "<font color=\"" + getStatusColor('open') + "\">&#9776;</font>",
@@ -130,12 +155,12 @@ function onList(event) {
 
       // Task Title
       var taskTitle = icons[item.status] + " " + item.task;
+      taskTitle += item.status === STATUSES.TAKEN ? " taken by <b>" + item.takenBy + "</b>" : "";
       widgets.push({
         "textParagraph": {
           "text": taskTitle
         }
-      })
-
+      });
 
       // Task buttons
       if (item.status === STATUSES.OPEN) {
@@ -164,7 +189,7 @@ function onList(event) {
         ];
 
       }
-      else if (item.status === STATUSES.TAKEN && name === item.takenBy) {
+      else if (item.status === STATUSES.TAKEN) {
 
         buttonsArr = [{
           textButton: {
@@ -238,10 +263,11 @@ function onClear(event) {
   var userMsg = event._taskListBot_.userMsg;
 
   var all = false;
-  var msg = 'Are you sure you want to clear all completed tasks? <b>This is irreversible</b>.';
+  var msg = 'Are you sure you want to clear all <b>completed</b> tasks? <b>This is irreversible</b>.';
 
   if (userMsg.trim().toLowerCase().indexOf('all') > -1) {
     var msg = 'Are you sure you want to clear <b>ALL (completed and open)</b> tasks? <b>This is irreversible</b>.';
+    all = true;
   }
 
   var buttonsArr = [{
@@ -287,21 +313,15 @@ function onClear(event) {
  * @param {Object} event - the parent event object.
  */
 function onHelp(event) {
-  var sections = [];
-
-  sections.push({"widgets": [{
-       "textParagraph": {
-         "text": "```<br>Usage: /[command] [?options] <br/><br/>" +
-         "Commands: <br/>" +
-         " add [task]   : Adds a new task to " + getChatName(event) + " <br/>" +
-         " list         : Lists all tasks in " + getChatName(event) + " <br/>" +
-         " clear        : Clear all completed tasks in " + getChatName(event) + " <br/>" +
-         "```"
-       }
-    }]
-  });
-
-  return createCardFromSections(sections);
+  return {
+    text: "TaskList Bot Help: \n" +
+          "```\nUsage: /[command] [?options] \n" +
+          "Commands: \n" +
+          "\tadd [task|CR|MR|QA|LINK]\t\t: Adds a new task to " + getChatName(event) + " \n" +
+          "\tlist\t\t\t\t: Lists all tasks in " + getChatName(event) + " \n" +
+          "\tclear [?all]\t\t\t: Clear all completed [or all] tasks in " + getChatName(event) + "\n" +
+          "```"
+  };
 }
 
 
@@ -347,6 +367,7 @@ function completeAction(index, name, listPath, event) {
   var update = { status: STATUSES.COMPLETED, completedOn: Date.now() };
 
   if (event.user.displayName === current.takenBy) {
+
     update = _.extend(current, update);
     db.setData(listPath, update);
 
@@ -361,7 +382,7 @@ function completeAction(index, name, listPath, event) {
     }
 
   } else {
-    msg = "Task " + ( parseInt(index) + 1 ) + " taken by " + name + " and can only be completed by the same user.";
+    msg = "Task " + ( parseInt(index) + 1 ) + " taken by " + current.takenBy + " and can only be completed by the same user.";
 
     sections.push({"widgets":
       [{
@@ -385,12 +406,12 @@ function completeAction(index, name, listPath, event) {
   */
 function takeAction(index, name, listPath, event) {
   var sections = [];
-  var current = db.getData(listPath);
   listPath = listPath + "/" + index;
+  var data = db.getData(listPath);
 
-  if (current.status === STATUSES.TAKEN) {
+  if (data.status === STATUSES.TAKEN) {
 
-    var msg = "Task already taken by " + current.takenBy;
+    var msg = "Task already taken by " + data.takenBy;
     sections.push({"widgets": [{
         "textParagraph": {
           "text": msg
@@ -401,9 +422,9 @@ function takeAction(index, name, listPath, event) {
     return createCardFromSections(sections);
 
   } else {
-
+    name = event.user.displayName;
     var update = { status: STATUSES.TAKEN, takenBy: name, takenOn: Date.now() };
-    update = _.extend(current, update);
+    update = _.extend(data, update);
     db.setData(listPath, update);
 
     bindTaskBotParams(event);
@@ -434,17 +455,16 @@ function clearTasksAction(listPath, clearAll) {
 
   if (clearAll) {
     msg = "All Tasks (Open, Taken & Completed) in current list are cleared.";
+    db.setData(listPath, []);
+  } else {
+    var list = db.getData(listPath);
+    list = list.filter(function(item) {
+      return item.status !== STATUSES.COMPLETED;
+    });
+    db.setData(listPath, list);
   }
 
-  var list = db.getData(listPath);
-
-  list = list.filter(function(item) {
-    return item.status !== STATUSES.COMPLETED;
-  });
-
   console.info('clearTaskAction:filter', list);
-
-  db.setData(listPath, list);
 
   sections.push({"widgets": [{
         "textParagraph": {
@@ -496,12 +516,14 @@ function getListPath(event) {
 /**
  * Creates a card-formatted response.
  *
- * @param {object} widgets the UI components to send.
+ * @param {object} header   - The header component of the Card.
+ * @param {object} widgets  - the UI components to send.
  * @return {object} JSON-formatted response.
  */
-function createCardResponse(widgets) {
+function createCardResponse(header, widgets) {
+header = header || HEADER;
   return {
-    cards: [HEADER, {
+    cards: [header, {
       sections: [{
         widgets: widgets
       }]
